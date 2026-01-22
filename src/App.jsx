@@ -1,15 +1,34 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
+import { isSupabaseConfigured } from './lib/supabase';
 import JoinPage from './pages/JoinPage';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import QnA from './pages/QnA';
 import Layout from './components/Layout';
 
+// Safety check screen
+const ConfigErrorScreen = () => (
+  <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-red-50 text-red-900">
+    <h1 className="text-3xl font-bold mb-4">😿 Meow... Setup Needed!</h1>
+    <p className="max-w-md text-lg">
+      The app couldn't connect to the database.
+    </p>
+    <div className="mt-6 bg-white p-6 rounded-xl shadow-sm text-left text-sm font-mono border border-red-100 overflow-x-auto w-full max-w-lg">
+      <p className="font-bold text-gray-500 mb-2">Missing Environment Variables:</p>
+      <p>VITE_SUPABASE_URL</p>
+      <p>VITE_SUPABASE_ANON_KEY</p>
+    </div>
+    <p className="mt-6 text-sm text-gray-600">
+      If you are on Vercel, go to <strong>Settings &gt; Environment Variables</strong> and add them.
+    </p>
+  </div>
+);
+
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useApp();
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-pastel-bg">Loading...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-pastel-bg text-gray-400 font-medium animate-pulse">Loading...</div>;
   if (!user) return <Navigate to="/join" replace />;
   return children;
 };
@@ -29,11 +48,15 @@ const AppRoutes = () => {
 };
 
 function App() {
+  if (!isSupabaseConfigured) {
+    return <ConfigErrorScreen />;
+  }
+
   return (
     <AppProvider>
-      <BrowserRouter>
+      <HashRouter>
         <AppRoutes />
-      </BrowserRouter>
+      </HashRouter>
     </AppProvider>
   );
 }
