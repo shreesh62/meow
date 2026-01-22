@@ -3,20 +3,8 @@ import { useApp } from '../context/AppContext';
 import { apiGetLatestMoods, apiUpdateMood } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { Card, Button } from '../components/ui';
-import { Plus, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-
-const EMOJIS = [
-  { char: '😊', label: 'Happy', color: 'bg-pastel-yellow' },
-  { char: '🥰', label: 'Loved', color: 'bg-pastel-pink' },
-  { char: '😴', label: 'Tired', color: 'bg-pastel-lavender' },
-  { char: '😤', label: 'Annoyed', color: 'bg-pastel-peach' },
-  { char: '😢', label: 'Sad', color: 'bg-blue-100' },
-  { char: '😎', label: 'Cool', color: 'bg-pastel-green' },
-  { char: '🤒', label: 'Sick', color: 'bg-green-100' },
-  { char: '🤯', label: 'Stressed', color: 'bg-red-100' },
-  { char: '🥳', label: 'Excited', color: 'bg-purple-100' },
-];
+import { MOOD_PRESETS, normalizeBgClass } from '../lib/colors';
 
 const Dashboard = () => {
   const { user, space } = useApp();
@@ -38,18 +26,12 @@ const Dashboard = () => {
   useEffect(() => {
     fetchMoods();
 
-    // Real-time subscription
     const channel = supabase
       .channel('moods-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'moods', filter: `space_id=eq.${space.id}` },
-        (payload) => {
-          console.log('New mood received!', payload);
-          // Optimistic update or refetch. 
-          // Since we need joined user data, refetching is safer for MVP, or we can just fetch the new row if we had the user info locally.
-          fetchMoods(); 
-        }
+        () => fetchMoods()
       )
       .subscribe();
 
@@ -60,9 +42,8 @@ const Dashboard = () => {
 
   const handleUpdateMood = async (emojiObj) => {
     try {
-      await apiUpdateMood(user.id, space.id, emojiObj.char, emojiObj.label, emojiObj.color);
+      await apiUpdateMood(user.id, space.id, emojiObj.emoji, emojiObj.label, emojiObj.color);
       setShowPicker(false);
-      // fetchMoods will be triggered by realtime, but we can also optimistically update
     } catch (error) {
       console.error(error);
       alert('Failed to update mood');
@@ -72,34 +53,46 @@ const Dashboard = () => {
   const myLatestMood = moods.find(m => m.user_id === user.id);
   const partnerLatestMood = moods.find(m => m.user_id !== user.id);
 
-  // Helper to handle opacity since v4 doesn't support bg-opacity-* utilities
-  // We'll just rely on the base color for now or use style prop if needed for exact opacity,
-  // or append /50 if the color string was just the color name.
-  // But here we have full class names in DB. 
-  // For MVP, we'll just use the color class as is, maybe with a wrapper div for opacity if needed,
-  // or just accept solid colors for the "bubble".
-  
+  const avatarBg = normalizeBgClass(user?.avatar_color);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 18) return 'Good Afternoon';
+    return 'Good Evening';
+  })();
+
   return (
-    <div className="space-y-6 pt-4">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Hi, {user.name}</h1>
-          <p className="text-sm text-gray-500">Space Code: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{space.code}</span></p>
+          <p className="text-sm font-semibold text-gray-500">{greeting}</p>
+          <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">{user.name}</h1>
+          <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/60 border border-white/60 px-3 py-1 text-xs font-semibold text-gray-600">
+            <span className="font-mono tracking-widest">{space.code}</span>
+            <span className="text-gray-400">space</span>
+          </div>
         </div>
-        <div className={`w-10 h-10 rounded-full bg-${user.avatar_color} flex items-center justify-center text-xl shadow-inner`}>
+        <div className={`h-12 w-12 rounded-2xl ${avatarBg} flex items-center justify-center text-2xl shadow-sm border border-white/40`}>
           {myLatestMood?.emoji || '👤'}
         </div>
       </div>
 
-      {/* Mood Cards */}
       <div className="grid grid-cols-1 gap-4">
-        {/* My Mood */}
         <Card className="relative overflow-hidden">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">My Mood</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-extrabold text-gray-800 tracking-wide">Your mood</h2>
+            <button
+              type="button"
+              onClick={() => setShowPicker(!showPicker)}
+              className="text-xs font-semibold text-gray-500 hover:text-gray-800 transition-all"
+            >
+              {myLatestMood ? 'Change' : 'Set'}
+            </button>
+          </div>
           {myLatestMood ? (
             <div className="flex flex-col items-center py-4">
-              <div className={`text-6xl mb-4 p-6 rounded-full ${myLatestMood.color} animate-bounce-slow`}>
+              <div className={`text-6xl mb-4 p-6 rounded-3xl ${myLatestMood.color} shadow-sm border border-white/50`}>
                 {myLatestMood.emoji}
               </div>
               <h3 className="text-xl font-bold text-gray-800">{myLatestMood.label}</h3>
@@ -108,25 +101,21 @@ const Dashboard = () => {
               </p>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
-              <p>How are you feeling?</p>
+            <div className="text-center py-10 text-gray-500">
+              <p className="font-semibold">Pick a vibe for today</p>
+              <p className="text-xs text-gray-400 mt-1">You can update it anytime.</p>
             </div>
           )}
-          
-          <Button 
-            onClick={() => setShowPicker(!showPicker)}
-            className="mt-4 bg-gray-800 text-white hover:bg-gray-700"
-          >
-            {myLatestMood ? 'Update Mood' : 'Set Mood'}
+          <Button onClick={() => setShowPicker(true)} className="mt-4">
+            {myLatestMood ? 'Update mood' : 'Set mood'}
           </Button>
         </Card>
 
-        {/* Partner Mood */}
-        <Card className={!partnerLatestMood ? 'bg-gray-50 border-dashed' : ''}>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Partner's Mood</h2>
+        <Card className={!partnerLatestMood ? 'bg-white/40 border-dashed' : ''}>
+          <h2 className="text-sm font-extrabold text-gray-800 tracking-wide mb-4">Partner mood</h2>
           {partnerLatestMood ? (
             <div className="flex flex-col items-center py-4">
-               <div className={`text-6xl mb-4 p-6 rounded-full ${partnerLatestMood.color}`}>
+              <div className={`text-6xl mb-4 p-6 rounded-3xl ${partnerLatestMood.color} shadow-sm border border-white/50`}>
                 {partnerLatestMood.emoji}
               </div>
               <h3 className="text-xl font-bold text-gray-800">{partnerLatestMood.label}</h3>
@@ -135,34 +124,31 @@ const Dashboard = () => {
               </p>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
-              <p>Waiting for partner to join or update...</p>
-              <div className="mt-4 flex justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-300"></div>
-              </div>
+            <div className="text-center py-10 text-gray-500">
+              <p className="font-semibold">Waiting for your person…</p>
+              <p className="text-xs text-gray-400 mt-1">They’ll appear here when they set a mood.</p>
             </div>
           )}
         </Card>
       </div>
 
-      {/* Mood Picker Sheet/Modal */}
       {showPicker && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-xl animate-in slide-in-from-bottom-10">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl p-6 shadow-xl bg-white/90 backdrop-blur-xl border border-white/70">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold">How are you feeling?</h3>
-              <button onClick={() => setShowPicker(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h3 className="text-lg font-extrabold text-gray-900">Pick your mood</h3>
+              <button onClick={() => setShowPicker(false)} className="text-gray-500 hover:text-gray-900 transition-all">✕</button>
             </div>
             
             <div className="grid grid-cols-3 gap-4">
-              {EMOJIS.map((e) => (
+              {MOOD_PRESETS.map((e) => (
                 <button
                   key={e.label}
                   onClick={() => handleUpdateMood(e)}
-                  className={`flex flex-col items-center justify-center p-4 rounded-xl transition-all hover:scale-105 active:scale-95 ${e.color} bg-opacity-30 hover:bg-opacity-50`}
+                  className={`flex flex-col items-center justify-center p-4 rounded-2xl transition-all active:scale-[0.99] ${e.color} shadow-sm border border-white/50`}
                 >
-                  <span className="text-3xl mb-1">{e.char}</span>
-                  <span className="text-xs font-medium text-gray-700">{e.label}</span>
+                  <span className="text-3xl mb-1">{e.emoji}</span>
+                  <span className="text-xs font-semibold text-gray-800">{e.label}</span>
                 </button>
               ))}
             </div>

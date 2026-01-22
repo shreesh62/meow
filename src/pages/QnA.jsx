@@ -1,181 +1,288 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { apiGetQuestions, apiGetAnswers, apiSubmitAnswer } from '../services/api';
+import { apiGetAllAnswers, apiGetQuestions, apiSubmitAnswer } from '../services/api';
 import { supabase } from '../lib/supabase';
-import { Card, Button } from '../components/ui';
-import { getDayOfYear } from 'date-fns';
+import { Button, Card, Chip } from '../components/ui';
+import { normalizeBgClass } from '../lib/colors';
+
+const safeOptions = (options) => {
+  if (Array.isArray(options)) return options;
+  try {
+    if (typeof options === 'string') return JSON.parse(options);
+  } catch {
+    return [];
+  }
+  return [];
+};
 
 const QnA = () => {
   const { user, space } = useApp();
-  const [question, setQuestion] = useState(null);
+  const [tab, setTab] = useState('answer'); // answer | flashcards
+  const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState([]);
+  const [activeQuestionId, setActiveQuestionId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const loadData = async () => {
+    const [qs, ans] = await Promise.all([apiGetQuestions(), apiGetAllAnswers(space.id)]);
+    const safeQs = qs || [];
+    const safeAns = ans || [];
+    setQuestions(safeQs);
+    setAnswers(safeAns);
+    if (!activeQuestionId && safeQs.length > 0) setActiveQuestionId(safeQs[0].id);
+  };
+
   useEffect(() => {
-    const loadData = async () => {
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
       try {
-        // 1. Get all questions
-        const allQuestions = await apiGetQuestions();
-        if (!allQuestions || allQuestions.length === 0) {
-            setQuestion(null);
-            return;
-        }
-
-        // 2. Pick today's question deterministically
-        const dayOfYear = getDayOfYear(new Date());
-        const questionIndex = dayOfYear % allQuestions.length;
-        const todaysQuestion = allQuestions[questionIndex];
-        setQuestion(todaysQuestion);
-
-        // 3. Get answers for this question
-        if (todaysQuestion) {
-            const answersData = await apiGetAnswers(space.id, todaysQuestion.id);
-            setAnswers(answersData || []);
-        }
-
-      } catch (error) {
-        console.error("Failed to load QnA", error);
+        await loadData();
+      } catch (e) {
+        if (!cancelled) console.error(e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
+    run();
 
-    loadData();
-
-    // Realtime subscription for answers
     const channel = supabase
       .channel('answers-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'answers', filter: `space_id=eq.${space.id}` },
-        () => {
-             // Reload to simplify state management
-             loadData();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'answers', filter: `space_id=eq.${space.id}` }, () => {
+        run();
+      })
       .subscribe();
 
     return () => {
-        supabase.removeChannel(channel);
+      cancelled = true;
+      supabase.removeChannel(channel);
     };
   }, [space.id]);
 
-  const handleAnswer = async (index) => {
-    if (!question) return;
+  const myAnswersByQuestion = useMemo(() => {
+    const map = new Map();
+    for (const a of answers) {
+      if (a.user_id === user.id) map.set(a.question_id, a);
+    }
+    return map;
+  }, [answers, user.id]);
+
+  const partnerAnswersDeck = useMemo(() => {
+    const deck = [];
+    for (const a of answers) {
+      if (a.user_id === user.id) continue;
+      if (!a.questions?.text) continue;
+      deck.push(a);
+    }
+    return deck;
+  }, [answers, user.id]);
+
+  const activeQuestion = useMemo(() => questions.find((q) => q.id === activeQuestionId) || null, [questions, activeQuestionId]);
+  const activeOptions = useMemo(() => safeOptions(activeQuestion?.options), [activeQuestion]);
+  const myActiveAnswer = activeQuestionId ? myAnswersByQuestion.get(activeQuestionId) : null;
+
+  const submit = async (optionIndex) => {
+    if (!activeQuestionId) return;
     setSubmitting(true);
     try {
-        await apiSubmitAnswer(user.id, space.id, question.id, index);
-        // Optimistic update or wait for realtime
-    } catch (error) {
-        console.error("Failed to submit answer", error);
-        alert("Failed to submit answer");
+      await apiSubmitAnswer(user.id, space.id, activeQuestionId, optionIndex);
+    } catch (e) {
+      console.error(e);
+      alert(e?.message || 'Failed to save your answer');
     } finally {
-        setSubmitting(false);
+      setSubmitting(false);
     }
   };
 
-  if (loading) return <div className="text-center pt-20 text-gray-400">Loading daily question...</div>;
-  if (!question) return <div className="text-center pt-20 text-gray-400">No questions available yet!</div>;
+  const [cardIndex, setCardIndex] = useState(0);
+  const [reveal, setReveal] = useState(false);
+  useEffect(() => {
+    setReveal(false);
+    setCardIndex((i) => Math.min(i, Math.max(0, partnerAnswersDeck.length - 1)));
+  }, [partnerAnswersDeck.length]);
 
-  const myAnswer = answers.find(a => a.user_id === user.id);
-  const partnerAnswer = answers.find(a => a.user_id !== user.id);
-  
-  // Parse options safely
-  let options = [];
-  try {
-      options = typeof question.options === 'string' ? JSON.parse(question.options) : question.options;
-  } catch (e) {
-      options = ["Yes", "No"];
+  const currentCard = partnerAnswersDeck[cardIndex] || null;
+
+  if (loading) {
+    return <div className="pt-10 text-center text-gray-500 font-semibold animate-pulse">Loading Q&A…</div>;
   }
 
-  const showResults = myAnswer && partnerAnswer;
+  if (!questions.length) {
+    return (
+      <div className="pt-10 text-center text-gray-500">
+        <p className="font-semibold">No questions yet</p>
+        <p className="text-xs text-gray-400 mt-1">Add questions in Supabase to use this tab.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="pt-4 space-y-6 pb-20">
-      <h1 className="text-2xl font-bold text-gray-800">Daily Question</h1>
-      
-      <Card className="min-h-[400px] flex flex-col justify-center relative overflow-hidden">
-        {/* Decorative background circle */}
-        <div className="absolute -top-20 -right-20 w-64 h-64 bg-pastel-yellow/30 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-pastel-blue/30 rounded-full blur-3xl"></div>
-        
-        <div className="relative z-10">
-            <h2 className="text-xl font-bold text-gray-800 text-center mb-8 leading-relaxed">
-                {question.text}
-            </h2>
+    <div className="space-y-6 pb-24">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">Q&A</h1>
+          <p className="text-sm text-gray-500 font-semibold">Answer anytime. See partner later as flashcards.</p>
+        </div>
+      </div>
 
-            <div className="space-y-3">
-                {options.map((opt, idx) => {
-                    const isSelected = myAnswer?.selected_option_index === idx;
-                    const isPartnerSelected = partnerAnswer?.selected_option_index === idx;
-                    
-                    let btnClass = "bg-gray-50 hover:bg-gray-100 text-gray-700"; // Default
-                    
-                    if (showResults) {
-                        if (isSelected && isPartnerSelected) {
-                            btnClass = "bg-pastel-green text-gray-800 ring-2 ring-green-400 border-green-400"; // Match!
-                        } else if (isSelected) {
-                            btnClass = "bg-pastel-blue text-white"; // My choice
-                        } else if (isPartnerSelected) {
-                            btnClass = "bg-pastel-pink text-gray-800 border-pastel-pink"; // Partner choice
-                        } else {
-                            btnClass = "opacity-50";
-                        }
-                    } else if (myAnswer) {
-                        // Waiting state
-                        if (isSelected) {
-                            btnClass = "bg-pastel-blue text-white";
-                        } else {
-                            btnClass = "opacity-40 cursor-not-allowed";
-                        }
-                    }
+      <div className="flex gap-3">
+        <Chip active={tab === 'answer'} onClick={() => setTab('answer')} className="flex-1 justify-center">
+          Answer
+        </Chip>
+        <Chip active={tab === 'flashcards'} onClick={() => setTab('flashcards')} className="flex-1 justify-center">
+          Flashcards
+        </Chip>
+      </div>
 
-                    return (
-                        <button
-                            key={idx}
-                            onClick={() => !myAnswer && handleAnswer(idx)}
-                            disabled={!!myAnswer || submitting}
-                            className={`w-full p-4 rounded-xl text-left font-medium transition-all relative overflow-hidden ${btnClass}`}
-                        >
-                            <span className="relative z-10 flex justify-between items-center">
-                                {opt}
-                                {showResults && isPartnerSelected && (
-                                    <span className="text-xs bg-white/80 px-2 py-1 rounded-full text-gray-600 shadow-sm">Partner</span>
-                                )}
-                                {showResults && isSelected && !isPartnerSelected && (
-                                    <span className="text-xs bg-white/20 px-2 py-1 rounded-full text-white">You</span>
-                                )}
-                            </span>
-                        </button>
-                    );
-                })}
+      {tab === 'answer' && (
+        <Card className="relative overflow-hidden">
+          <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-pastel-yellow/30 blur-3xl" />
+          <div className="absolute -bottom-28 -left-28 h-80 w-80 rounded-full bg-pastel-blue/30 blur-3xl" />
+
+          <div className="relative">
+            <div className="flex flex-wrap gap-2 mb-6">
+              {questions.slice(0, 12).map((q, idx) => (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => setActiveQuestionId(q.id)}
+                  className={`h-9 w-9 rounded-2xl flex items-center justify-center text-sm font-extrabold transition-all ${
+                    q.id === activeQuestionId ? 'bg-gray-900 text-white shadow-sm' : 'bg-white/70 text-gray-700 hover:bg-white'
+                  }`}
+                  aria-label={`Question ${idx + 1}`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
             </div>
 
-            {!showResults && myAnswer && !partnerAnswer && (
-                <div className="mt-8 text-center animate-pulse text-gray-500 text-sm font-medium bg-gray-50 py-3 rounded-full">
-                    Waiting for partner to answer... 🤫
+            <h2 className="text-xl font-extrabold text-gray-900 leading-snug">
+              {activeQuestion?.text}
+            </h2>
+            <p className="mt-2 text-xs text-gray-500 font-semibold">
+              {myActiveAnswer ? 'Saved' : 'Not answered yet'}
+            </p>
+
+            <div className="mt-6 space-y-3">
+              {activeOptions.map((opt, idx) => {
+                const selected = myActiveAnswer?.selected_option_index === idx;
+                return (
+                  <button
+                    key={`${activeQuestionId}-${idx}`}
+                    type="button"
+                    onClick={() => submit(idx)}
+                    disabled={submitting}
+                    className={`w-full rounded-2xl px-4 py-4 text-left font-semibold transition-all border ${
+                      selected
+                        ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                        : 'bg-white/70 text-gray-800 border-white/60 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="leading-relaxed">{opt}</span>
+                      {selected && <span className="text-xs font-extrabold bg-white/15 px-3 py-1 rounded-full">Selected</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6">
+              <Button variant="secondary" onClick={() => setTab('flashcards')}>
+                See partner flashcards
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {tab === 'flashcards' && (
+        <Card className="relative overflow-hidden">
+          <div className="absolute -top-28 -left-28 h-80 w-80 rounded-full bg-pastel-pink/30 blur-3xl" />
+          <div className="absolute -bottom-28 -right-28 h-80 w-80 rounded-full bg-pastel-green/30 blur-3xl" />
+
+          <div className="relative">
+            {!partnerAnswersDeck.length ? (
+              <div className="py-10 text-center">
+                <p className="font-semibold text-gray-700">No partner answers yet</p>
+                <p className="text-xs text-gray-500 mt-1">When they answer, their flashcards appear here.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="text-xs font-semibold text-gray-500">
+                    {cardIndex + 1} / {partnerAnswersDeck.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReveal((r) => !r)}
+                    className="text-xs font-semibold text-gray-600 hover:text-gray-900 transition-all"
+                  >
+                    {reveal ? 'Hide' : 'Reveal'}
+                  </button>
                 </div>
-            )}
-            
-            {!showResults && myAnswer && partnerAnswer && (
-                 // Should be covered by showResults logic, but just in case
-                 <div className="mt-8 text-center text-green-500 font-bold">
-                    Both answered! Revealing...
+
+                <button
+                  type="button"
+                  onClick={() => setReveal((r) => !r)}
+                  className="w-full text-left"
+                >
+                  <div className={`rounded-3xl border border-white/60 shadow-sm bg-white/70 p-6 transition-all ${reveal ? 'scale-[0.99]' : ''}`}>
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className={`h-10 w-10 rounded-2xl ${normalizeBgClass(currentCard?.users?.avatar_color)} flex items-center justify-center text-xl border border-white/50 shadow-sm`}>
+                        🙂
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Partner</p>
+                        <p className="font-extrabold text-gray-900">{currentCard?.users?.name || 'Your person'}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-lg font-extrabold text-gray-900 leading-snug">{currentCard?.questions?.text}</p>
+                    <div className="mt-6">
+                      {!reveal ? (
+                        <div className="rounded-2xl bg-gray-900 text-white px-4 py-4 font-semibold text-center">
+                          Tap to reveal answer
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl bg-pastel-yellow/40 border border-white/60 px-4 py-4">
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Their answer</p>
+                          <p className="mt-1 text-lg font-extrabold text-gray-900">
+                            {safeOptions(currentCard?.questions?.options)[currentCard?.selected_option_index] ?? '—'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setReveal(false);
+                      setCardIndex((i) => Math.max(0, i - 1));
+                    }}
+                    disabled={cardIndex === 0}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setReveal(false);
+                      setCardIndex((i) => Math.min(partnerAnswersDeck.length - 1, i + 1));
+                    }}
+                    disabled={cardIndex >= partnerAnswersDeck.length - 1}
+                  >
+                    Next
+                  </Button>
                 </div>
+              </>
             )}
-            
-            {showResults && (
-                <div className="mt-8 text-center">
-                    {myAnswer.selected_option_index === partnerAnswer.selected_option_index ? (
-                        <p className="text-pastel-green font-bold text-lg">It's a Match! 🎉</p>
-                    ) : (
-                        <p className="text-gray-400">Interesting difference! 🤔</p>
-                    )}
-                </div>
-            )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

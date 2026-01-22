@@ -13,7 +13,7 @@ create table if not exists public.users (
   id uuid primary key default uuid_generate_v4(),
   space_id uuid references public.spaces(id) on delete cascade not null,
   name text not null,
-  avatar_color text default 'pastel-blue',
+  avatar_color text default 'bg-pastel-blue',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

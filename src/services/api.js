@@ -103,6 +103,16 @@ export const apiGetAnswers = async (spaceId, questionId) => {
   return data;
 };
 
+export const apiGetAllAnswers = async (spaceId) => {
+  const { data, error } = await supabase
+    .from('answers')
+    .select('*, users(name, avatar_color), questions(text, options)')
+    .eq('space_id', spaceId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
 export const apiSubmitAnswer = async (userId, spaceId, questionId, optionIndex) => {
   const { data, error } = await supabase
     .from('answers')

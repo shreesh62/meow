@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiCreateSpace, apiCreateUser, apiGetSpaceByCode } from '../services/api';
 import { useApp } from '../context/AppContext';
-import { Button, Input, Card } from '../components/ui';
-import { Heart, Users } from 'lucide-react';
+import { Button, Input, Card, Chip } from '../components/ui';
+import { Heart } from 'lucide-react';
+import { AVATAR_BG_CLASSES } from '../lib/colors';
 
 const JoinPage = () => {
   const [mode, setMode] = useState('create'); // create | join
@@ -29,9 +30,7 @@ const JoinPage = () => {
         }
       }
 
-      // Random pastel color for avatar
-      const colors = ['pastel-pink', 'pastel-blue', 'pastel-green', 'pastel-yellow', 'pastel-lavender', 'pastel-peach'];
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      const randomColor = AVATAR_BG_CLASSES[Math.floor(Math.random() * AVATAR_BG_CLASSES.length)];
 
       const user = await apiCreateUser(space.id, name, randomColor);
       login(user, space);
@@ -45,39 +44,42 @@ const JoinPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-pastel-bg">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="bg-white p-4 rounded-full inline-block shadow-sm mb-4">
-            <Heart className="w-8 h-8 text-pastel-pink fill-current" />
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6 bg-pastel-bg">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 -right-24 h-80 w-80 rounded-full bg-pastel-pink/30 blur-3xl" />
+        <div className="absolute top-40 -left-28 h-96 w-96 rounded-full bg-pastel-blue/30 blur-3xl" />
+        <div className="absolute -bottom-32 right-0 h-96 w-96 rounded-full bg-pastel-lavender/30 blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative">
+        <div className="text-left mb-8">
+          <div className="bg-white/80 backdrop-blur-xl p-4 rounded-2xl inline-flex items-center gap-3 shadow-sm border border-white/60 mb-4">
+            <div className="h-10 w-10 rounded-2xl bg-gray-900 text-white flex items-center justify-center">
+              <Heart className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-semibold tracking-wide uppercase">Couple Space</p>
+              <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Meow Mood</h1>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Meow Mood</h1>
-          <p className="text-gray-500">Share your feelings with your favorite person.</p>
+          <p className="text-gray-600 leading-relaxed">
+            Private mood sync for two people. Create a space, share the code, and you’re in.
+          </p>
         </div>
 
         <Card>
-          <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-            <button
-              onClick={() => setMode('create')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                mode === 'create' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'
-              }`}
-            >
-              Create Space
-            </button>
-            <button
-              onClick={() => setMode('join')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                mode === 'join' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'
-              }`}
-            >
-              Join Space
-            </button>
+          <div className="flex gap-3 mb-6">
+            <Chip active={mode === 'create'} onClick={() => setMode('create')} className="flex-1 justify-center">
+              Create
+            </Chip>
+            <Chip active={mode === 'join'} onClick={() => setMode('join')} className="flex-1 justify-center">
+              Join
+            </Chip>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1 ml-1">Your Name</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Your Name</label>
               <Input
                 placeholder="e.g. Kitten"
                 value={name}
@@ -88,7 +90,7 @@ const JoinPage = () => {
 
             {mode === 'join' && (
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1 ml-1">Invite Code</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1 ml-1">Invite Code</label>
                 <Input
                   placeholder="e.g. 123456"
                   value={code}

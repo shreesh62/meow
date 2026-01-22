@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { apiGetMoodHistory } from '../services/api';
-import { Card } from '../components/ui';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
+import { Card, Chip } from '../components/ui';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 
 const History = () => {
   const { user, space } = useApp();
   const [moods, setMoods] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('month'); // month | week
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -23,11 +24,14 @@ const History = () => {
     loadHistory();
   }, [space.id]);
 
-  // Calendar Logic
   const today = new Date();
-  const days = eachDayOfInterval({
+  const monthDays = eachDayOfInterval({
     start: startOfMonth(today),
     end: endOfMonth(today),
+  });
+  const weekDays = eachDayOfInterval({
+    start: startOfWeek(today, { weekStartsOn: 0 }),
+    end: endOfWeek(today, { weekStartsOn: 0 }),
   });
 
   // Stats Logic
@@ -78,75 +82,116 @@ const History = () => {
   };
 
   return (
-    <div className="pt-4 space-y-6 pb-20">
-      <h1 className="text-2xl font-bold text-gray-800">Mood History</h1>
+    <div className="space-y-6 pb-24">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-500">My Calendar</p>
+          <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">Mood History</h1>
+        </div>
+        <div className="flex gap-2">
+          <Chip active={view === 'month'} onClick={() => setView('month')}>
+            Month
+          </Chip>
+          <Chip active={view === 'week'} onClick={() => setView('week')}>
+            Week
+          </Chip>
+        </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-4 flex flex-col items-center justify-center bg-pastel-blue/20 border-none">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Top Mood</span>
+          <span className="text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">Top Mood</span>
           <span className="text-4xl mt-2">{getMostFrequentMood(myMoods)}</span>
         </Card>
         <Card className="p-4 flex flex-col items-center justify-center bg-pastel-pink/20 border-none">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">In Sync</span>
-          <span className="text-3xl mt-2 font-bold text-gray-700">{calculateOverlap()}%</span>
+          <span className="text-[10px] font-extrabold text-gray-600 uppercase tracking-wider">Overlap</span>
+          <span className="text-3xl mt-2 font-extrabold text-gray-800">{calculateOverlap()}%</span>
         </Card>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-50">
-        <h2 className="text-lg font-bold text-gray-700 mb-4">{format(today, 'MMMM yyyy')}</h2>
-        <div className="grid grid-cols-7 gap-2 text-center mb-2">
-          {['S','M','T','W','T','F','S'].map(d => (
-            <div key={d} className="text-xs text-gray-400 font-bold">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            
-            // Find moods for this day (latest first in array, but we need to check all to find one for this day)
-            // Ideally we'd optimize this but for < 100 items it's fine
-            const myMood = moods.find(m => m.user_id === user.id && isSameDay(parseISO(m.created_at), day));
-            const partnerMood = moods.find(m => m.user_id !== user.id && isSameDay(parseISO(m.created_at), day));
-            
-            return (
-              <div key={dayStr} className="aspect-square flex flex-col items-center justify-center bg-gray-50 rounded-xl relative overflow-hidden">
-                <span className="text-[10px] text-gray-400 absolute top-1 left-1">{format(day, 'd')}</span>
-                
-                {/* Mood Indicators */}
-                <div className="flex gap-0.5 mt-2">
-                   {/* My Mood */}
-                   <div className="text-sm z-10">{myMood?.emoji || ''}</div>
-                   {/* Partner Mood (slightly offset or smaller?) */}
-                   {partnerMood && (
-                       <div className="text-xs absolute bottom-1 right-1 opacity-80">{partnerMood.emoji}</div>
-                   )}
-                </div>
-                
-                {/* Background color if I logged */}
-                {myMood && (
-                    <div className={`absolute inset-0 opacity-20 ${myMood.color}`}></div>
-                )}
+      <Card className="relative overflow-hidden">
+        <div className="absolute -top-28 -right-28 h-80 w-80 rounded-full bg-pastel-yellow/30 blur-3xl" />
+        <div className="absolute -bottom-28 -left-28 h-80 w-80 rounded-full bg-pastel-green/30 blur-3xl" />
+
+        <div className="relative">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-extrabold text-gray-900">{format(today, 'MMMM yyyy')}</h2>
+          </div>
+
+          {view === 'month' ? (
+            <>
+              <div className="grid grid-cols-7 gap-2 text-center mb-2">
+                {['S','M','T','W','T','F','S'].map(d => (
+                  <div key={d} className="text-xs text-gray-400 font-extrabold">{d}</div>
+                ))}
               </div>
-            );
-          })}
+              <div className="grid grid-cols-7 gap-2">
+                {monthDays.map(day => {
+                  const dayStr = format(day, 'yyyy-MM-dd');
+                  const myMood = moods.find(m => m.user_id === user.id && isSameDay(parseISO(m.created_at), day));
+                  const partnerMood = moods.find(m => m.user_id !== user.id && isSameDay(parseISO(m.created_at), day));
+
+                  return (
+                    <div key={dayStr} className="aspect-square flex flex-col items-center justify-center bg-white/60 rounded-2xl relative overflow-hidden border border-white/60 shadow-sm">
+                      <span className="text-[10px] text-gray-400 absolute top-1 left-1 font-semibold">{format(day, 'd')}</span>
+
+                      <div className="flex gap-1 items-center">
+                        <div className="text-sm z-10">{myMood?.emoji || ''}</div>
+                        {partnerMood && (
+                          <div className="text-xs z-10 opacity-80">{partnerMood.emoji}</div>
+                        )}
+                      </div>
+
+                      {myMood && (
+                        <div className={`absolute inset-0 opacity-15 ${myMood.color}`}></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              {weekDays.map((day) => {
+                const dayStr = format(day, 'yyyy-MM-dd');
+                const myMood = moods.find(m => m.user_id === user.id && isSameDay(parseISO(m.created_at), day));
+                const partnerMood = moods.find(m => m.user_id !== user.id && isSameDay(parseISO(m.created_at), day));
+
+                return (
+                  <div key={dayStr} className="flex items-center justify-between rounded-2xl bg-white/60 border border-white/60 shadow-sm px-4 py-4">
+                    <div>
+                      <p className="text-sm font-extrabold text-gray-900">{format(day, 'EEE')}</p>
+                      <p className="text-xs text-gray-500 font-semibold">{format(day, 'MMM d')}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-2xl flex items-center justify-center text-xl border border-white/60 shadow-sm ${myMood?.color || 'bg-white'}`}>
+                        {myMood?.emoji || '—'}
+                      </div>
+                      <div className={`h-10 w-10 rounded-2xl flex items-center justify-center text-xl border border-white/60 shadow-sm ${partnerMood?.color || 'bg-white'}`}>
+                        {partnerMood?.emoji || '—'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      </div>
+      </Card>
       
-      {/* List View (Recent) */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wide ml-2">Recent Updates</h3>
+        <h3 className="text-sm font-extrabold text-gray-700 tracking-wide">Recent</h3>
         {moods.slice(0, 5).map(mood => (
-            <div key={mood.id} className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-50">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${mood.color} bg-opacity-50`}>
+            <div key={mood.id} className="flex items-center gap-4 bg-white/70 p-4 rounded-3xl shadow-sm border border-white/60 backdrop-blur-xl">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${mood.color} border border-white/60 shadow-sm`}>
                     {mood.emoji}
                 </div>
                 <div>
-                    <p className="font-bold text-gray-800">{mood.users?.name || 'Partner'}</p>
-                    <p className="text-xs text-gray-500">{format(parseISO(mood.created_at), 'MMM d, h:mm a')}</p>
+                    <p className="font-extrabold text-gray-900">{mood.users?.name || 'Partner'}</p>
+                    <p className="text-xs text-gray-500 font-semibold">{format(parseISO(mood.created_at), 'MMM d, h:mm a')}</p>
                 </div>
-                <div className="ml-auto font-medium text-gray-600 text-sm">
+                <div className="ml-auto font-extrabold text-gray-800 text-sm">
                     {mood.label}
                 </div>
             </div>
