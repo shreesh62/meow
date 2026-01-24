@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiCreateSpace, apiCreateUser, apiGetSpaceByCode } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { Button, Input, Card, Chip } from '../components/ui';
@@ -13,6 +13,15 @@ const JoinPage = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const c = (searchParams.get('code') || '').trim();
+    if (c) {
+      setMode('join');
+      setCode(c);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,7 +43,7 @@ const JoinPage = () => {
 
       const user = await apiCreateUser(space.id, name, randomColor);
       login(user, space);
-      navigate('/dashboard');
+      navigate('/');
     } catch (error) {
       console.error(error);
       alert('Error: ' + error.message);
