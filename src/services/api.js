@@ -93,7 +93,7 @@ export const apiGetMoodHistory = async (spaceId) => {
     .select('*, users(name, avatar_color)')
     .eq('space_id', spaceId)
     .order('created_at', { ascending: false })
-    .limit(100); // Limit to last 100 for MVP
+    .limit(500);
   
   if (error) throw error;
   return data;

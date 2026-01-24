@@ -6,6 +6,8 @@ import JoinPage from './pages/JoinPage';
 import Home from './pages/Home';
 import Calendar from './pages/Calendar';
 import AddMood from './pages/AddMood';
+import Profile from './pages/Profile';
+import Insights from './pages/Insights';
 import QnA from './pages/QnA';
 import Layout from './components/Layout';
 
@@ -42,6 +44,8 @@ const AppRoutes = () => {
         <Route index element={<Home />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="add" element={<AddMood />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="insights" element={<Insights />} />
         <Route path="qna" element={<QnA />} />
 
         <Route path="dashboard" element={<Navigate to="/" replace />} />

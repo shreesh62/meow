@@ -209,8 +209,9 @@ const Calendar = () => {
                   key={k}
                   type="button"
                   onClick={() => setSelectedDay(day)}
-                  className={`aspect-square rounded-2xl border border-white/60 shadow-sm bg-white/60 backdrop-blur-xl flex flex-col items-center justify-center relative transition-all active:scale-[0.99] ${active ? 'ring-2 ring-gray-900/10' : ''}`}
+                  className={`aspect-square rounded-2xl border border-white/60 shadow-sm bg-white/60 backdrop-blur-xl flex flex-col items-center justify-center relative overflow-hidden transition-all active:scale-[0.99] ${active ? 'ring-2 ring-gray-900/10' : ''}`}
                 >
+                  {my?.color ? <div className={`absolute inset-0 opacity-20 ${my.color}`} /> : null}
                   <span className="absolute top-1 left-1 text-[10px] font-semibold text-gray-400">{format(day, 'd')}</span>
                   <div className="text-xl">{my?.emoji || ''}</div>
                   {partner?.emoji ? (

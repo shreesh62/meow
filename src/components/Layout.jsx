@@ -1,13 +1,13 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Home, Plus, HelpCircle, LogOut } from 'lucide-react';
+import { Calendar, Home, Plus, HelpCircle, LineChart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { normalizeBgClass } from '../lib/colors';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useApp();
+  const { user } = useApp();
   const avatarBg = normalizeBgClass(user?.avatar_color);
   const hideNav = location.pathname === '/add';
 
@@ -21,9 +21,22 @@ const Layout = () => {
 
       <header className="relative max-w-md mx-auto px-4 pt-6 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`h-11 w-11 rounded-2xl ${avatarBg} border border-white/60 shadow-sm`} />
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className={`h-11 w-11 rounded-2xl ${avatarBg} border border-white/60 shadow-sm transition-all active:scale-[0.99]`}
+            aria-label="Profile"
+          />
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/insights')}
+            className="h-11 w-11 rounded-2xl bg-white/70 border border-white/60 backdrop-blur-xl shadow-sm flex items-center justify-center text-gray-800 hover:bg-white transition-all"
+            aria-label="Mood insights"
+          >
+            <LineChart size={20} />
+          </button>
           <button
             type="button"
             onClick={() => navigate('/qna')}
@@ -31,14 +44,6 @@ const Layout = () => {
             aria-label="Q&A"
           >
             <HelpCircle size={20} />
-          </button>
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="h-11 w-11 rounded-2xl bg-white/70 border border-white/60 backdrop-blur-xl shadow-sm flex items-center justify-center text-gray-800 hover:bg-white transition-all"
-            aria-label="Log out"
-          >
-            <LogOut size={20} />
           </button>
         </div>
       </header>

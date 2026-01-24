@@ -5,6 +5,8 @@ import { useApp } from '../context/AppContext';
 import { apiGetMoodHistory } from '../services/api';
 import { Card } from '../components/ui';
 import { supabase } from '../lib/supabase';
+import MiniMoodGraph from '../components/MiniMoodGraph';
+import { groupLatestMoodPerDay, lastNDaysKeys } from '../lib/moodAnalytics';
 
 const greetingForNow = () => {
   const h = new Date().getHours();
@@ -25,40 +27,11 @@ const softSubtext = () => {
 
 const dayKey = (d) => format(d, 'yyyy-MM-dd');
 
-const buildInviteLink = (code) => {
-  const origin = window.location.origin;
-  const path = window.location.pathname || '/';
-  return `${origin}${path}#/join?code=${encodeURIComponent(code)}`;
-};
-
-const copyText = async (text) => {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.setAttribute('readonly', '');
-      el.style.position = 'absolute';
-      el.style.left = '-9999px';
-      document.body.appendChild(el);
-      el.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(el);
-      return ok;
-    } catch {
-      return false;
-    }
-  }
-};
-
 const Home = () => {
   const { user, space } = useApp();
   const navigate = useNavigate();
   const [moods, setMoods] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,38 +87,28 @@ const Home = () => {
     return Array.from(map.values());
   }, [moods, user.id]);
 
-  const inviteLink = useMemo(() => buildInviteLink(space.code), [space.code]);
-
-  const onCopyCode = async () => {
-    const ok = await copyText(space.code);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } else {
-      alert('Could not copy. Please copy the code manually: ' + space.code);
-    }
-  };
-
-  const onShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Meow Mood invite',
-          text: 'Join my private space using this invite link:',
-          url: inviteLink,
-        });
-        return;
-      } catch {
+  const miniGraphPoints = useMemo(() => {
+    const my = moods.filter((m) => m.user_id === user.id);
+    const map = groupLatestMoodPerDay(my);
+    const keys = lastNDaysKeys(7);
+    return keys.map((k) => {
+      const m = map.get(k);
+      if (!m) {
+        return {
+          key: k,
+          created_at: `${k}T00:00:00`,
+          emoji: '•',
+          label: 'Quiet',
+        };
       }
-    }
-    const ok = await copyText(inviteLink);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } else {
-      alert('Invite link: ' + inviteLink);
-    }
-  };
+      return {
+        key: k,
+        created_at: m.created_at,
+        emoji: m.emoji,
+        label: m.label,
+      };
+    });
+  }, [moods, user.id]);
 
   return (
     <div className="space-y-5">
@@ -156,32 +119,22 @@ const Home = () => {
 
       <Card className="p-5">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-extrabold uppercase tracking-widest text-gray-500">Invite</p>
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-widest text-gray-500">Last 7 days</p>
             <p className="mt-2 text-sm font-semibold text-gray-600 leading-relaxed">
-              Share this code with your partner. No rush.
+              A gentle pattern, nothing to fix.
             </p>
-            <div className="mt-3 flex items-center gap-2">
-              <div className="rounded-2xl bg-white/70 border border-white/60 shadow-sm px-4 py-3 font-mono text-lg font-extrabold tracking-widest text-gray-900">
-                {space.code}
-              </div>
-              <button
-                type="button"
-                onClick={onCopyCode}
-                className="h-12 px-4 rounded-2xl bg-white/70 border border-white/60 shadow-sm backdrop-blur-xl text-sm font-extrabold text-gray-900 hover:bg-white transition-all"
-              >
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
           </div>
-
           <button
             type="button"
-            onClick={onShare}
-            className="h-12 px-4 rounded-2xl bg-gray-900 text-white shadow-sm border border-white/40 text-sm font-extrabold hover:opacity-90 transition-all"
+            onClick={() => navigate('/insights')}
+            className="h-10 px-4 rounded-2xl bg-white/70 border border-white/60 shadow-sm backdrop-blur-xl text-sm font-extrabold text-gray-900 hover:bg-white transition-all"
           >
-            Share
+            Insights
           </button>
+        </div>
+        <div className="mt-4">
+          <MiniMoodGraph points={miniGraphPoints} />
         </div>
       </Card>
 
