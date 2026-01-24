@@ -25,8 +25,13 @@ create table if not exists public.moods (
   emoji text not null,
   label text not null,
   color text not null,
+  tags text[],
+  note text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table public.moods add column if not exists tags text[];
+alter table public.moods add column if not exists note text;
 
 -- 4. QNA TABLE (Questions)
 create table if not exists public.questions (

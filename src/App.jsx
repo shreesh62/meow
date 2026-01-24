@@ -3,8 +3,9 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { isSupabaseConfigured } from './lib/supabase';
 import JoinPage from './pages/JoinPage';
-import Dashboard from './pages/Dashboard';
-import History from './pages/History';
+import Home from './pages/Home';
+import Calendar from './pages/Calendar';
+import AddMood from './pages/AddMood';
 import QnA from './pages/QnA';
 import Layout from './components/Layout';
 
@@ -38,10 +39,13 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/join" element={<JoinPage />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="history" element={<History />} />
+        <Route index element={<Home />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="add" element={<AddMood />} />
         <Route path="qna" element={<QnA />} />
+
+        <Route path="dashboard" element={<Navigate to="/" replace />} />
+        <Route path="history" element={<Navigate to="/calendar" replace />} />
       </Route>
     </Routes>
   );

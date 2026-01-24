@@ -48,15 +48,29 @@ export const apiGetUser = async (userId) => {
 };
 
 // MOOD
-export const apiUpdateMood = async (userId, spaceId, emoji, label, color) => {
-  const { data, error } = await supabase
-    .from('moods')
-    .insert([{ user_id: userId, space_id: spaceId, emoji, label, color }])
-    .select()
-    .single();
-  
-  if (error) throw error;
-  return data;
+export const apiUpdateMood = async (userId, spaceId, emoji, label, color, meta = {}) => {
+  const baseRow = { user_id: userId, space_id: spaceId, emoji, label, color };
+  const extendedRow = {
+    ...baseRow,
+    ...(meta?.tags ? { tags: meta.tags } : {}),
+    ...(meta?.note ? { note: meta.note } : {}),
+  };
+
+  const tryInsert = async (row) => {
+    const { data, error } = await supabase.from('moods').insert([row]).select().single();
+    if (error) throw error;
+    return data;
+  };
+
+  try {
+    return await tryInsert(extendedRow);
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.includes('column') && (msg.includes('tags') || msg.includes('note'))) {
+      return await tryInsert(baseRow);
+    }
+    throw e;
+  }
 };
 
 export const apiGetLatestMoods = async (spaceId) => {
