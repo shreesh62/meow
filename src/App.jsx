@@ -37,20 +37,39 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const AppRoutes = () => {
+  const { user, loading, connectionError } = useApp();
+
+  if (connectionError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-red-50 text-red-900">
+        <h1 className="text-3xl font-bold mb-4">😿 Connection Error</h1>
+        <p className="max-w-md text-lg mb-6">{connectionError}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="bg-red-600 hover:bg-red-700 text-white px-8 py-2 rounded-lg font-medium"
+        >
+          Try Again
+        </button>
+        <p className="mt-8 text-sm text-gray-500 max-w-sm italic">
+          Tip: If you haven't used the app in over a week, your database might be paused by Supabase. Log in to your Supabase dashboard to reactivate it.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/join" element={<JoinPage />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Home />} />
+        <Route index element={<Navigate to="/home" replace />} />
+        <Route path="home" element={<Home />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="add" element={<AddMood />} />
-        <Route path="profile" element={<Profile />} />
         <Route path="insights" element={<Insights />} />
+        <Route path="profile" element={<Profile />} />
         <Route path="qna" element={<QnA />} />
-
-        <Route path="dashboard" element={<Navigate to="/" replace />} />
-        <Route path="history" element={<Navigate to="/calendar" replace />} />
       </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };
